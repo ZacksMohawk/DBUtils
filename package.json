@@ -1,0 +1,11 @@
+{
+  "name": "dbutils",
+  "version": "1.0.0",
+  "description": "Command line tools for DB manipulation",
+  "main": "DBUtils.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}

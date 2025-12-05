@@ -1,0 +1,10 @@
+{
+    "dbConnections" : {
+        "localhost" : {
+            "dbType" : "MySQL",
+            "dbUser" : "<your DB username>",
+            "dbPassword" : "<your DB password>",
+            "dbConnectString" : "export MYSQL_PWD=<dbPassword>; mysql --user=\"<dbUser>\" < query.sql"
+        }
+    }
+}

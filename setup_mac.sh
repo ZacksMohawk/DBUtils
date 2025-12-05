@@ -1,0 +1,92 @@
+#!/bin/bash
+
+touch ~/.zshrc
+
+DBUTILSSET=false
+DBLINEBACKUPSET=false
+DBLINERESTORESET=false
+DBFULLBACKUPSET=false
+DBFULLRESTORESET=false
+DBEMPTYRESTORESET=false
+
+while read -r line
+do
+	if [[ "$line" =~ ^"alias dbutils="* ]]; then
+		DBUTILSSET=true
+	fi
+	if [[ "$line" =~ ^"alias dblinebackup="* ]]; then
+		DBLINEBACKUPSET=true
+	fi
+	if [[ "$line" =~ ^"alias dblinerestore="* ]]; then
+		DBLINERESTORESET=true
+	fi
+	if [[ "$line" =~ ^"alias dbfullbackup="* ]]; then
+		DBFULLBACKUPSET=true
+	fi
+	if [[ "$line" =~ ^"alias dbfullrestore="* ]]; then
+		DBFULLRESTORESET=true
+	fi
+	if [[ "$line" =~ ^"alias dbemptyrestore="* ]]; then
+		DBEMPTYRESTORESET=true
+	fi
+done < ~/.zshrc
+
+NEWLINESET=false
+
+if [[ "$DBUTILSSET" != true ]]; then
+	if [[ "$NEWLINESET" != true ]]; then
+		echo '' >> ~/.zshrc
+		NEWLINESET=true
+	fi
+	echo "Setting 'dbutils' alias";
+	echo "alias dbutils='dt=\$(pwd); cd $(pwd); node --no-warnings DBUtils.js -folderPath \$dt; cd \$dt;'" >> ~/.zshrc
+fi
+
+if [[ "$DBLINEBACKUPSET" != true ]]; then
+	if [[ "$NEWLINESET" != true ]]; then
+		echo '' >> ~/.zshrc
+		NEWLINESET=true
+	fi
+	echo "Setting 'dblinebackup' alias";
+	echo "alias dblinebackup='dt=\$(pwd); cd $(pwd); node --no-warnings DBUtils.js -dbLineBackup \$dt; cd \$dt;'" >> ~/.zshrc
+fi
+
+if [[ "$DBLINEBACKUPSET" != true ]]; then
+	if [[ "$NEWLINESET" != true ]]; then
+		echo '' >> ~/.zshrc
+		NEWLINESET=true
+	fi
+	echo "Setting 'dblinerestore' alias";
+	echo "alias dblinerestore='dt=\$(pwd); cd $(pwd); node --no-warnings DBUtils.js -dbLineRestore \$dt; cd \$dt;'" >> ~/.zshrc
+fi
+
+if [[ "$DBFULLBACKUPSET" != true ]]; then
+	if [[ "$NEWLINESET" != true ]]; then
+		echo '' >> ~/.zshrc
+		NEWLINESET=true
+	fi
+	echo "Setting 'dbfullbackup' alias";
+	echo "alias dbfullbackup='dt=\$(pwd); cd $(pwd); node --no-warnings DBUtils.js -dbFullBackup \$dt; cd \$dt;'" >> ~/.zshrc
+fi
+
+if [[ "$DBFULLRESTORESET" != true ]]; then
+	if [[ "$NEWLINESET" != true ]]; then
+		echo '' >> ~/.zshrc
+		NEWLINESET=true
+	fi
+	echo "Setting 'dbfullrestore' alias";
+	echo "alias dbfullrestore='dt=\$(pwd); cd $(pwd); node --no-warnings DBUtils.js -dbFullRestore \$dt; cd \$dt;'" >> ~/.zshrc
+fi
+
+if [[ "$DBEMPTYRESTORESET" != true ]]; then
+	if [[ "$NEWLINESET" != true ]]; then
+		echo '' >> ~/.zshrc
+		NEWLINESET=true
+	fi
+	echo "Setting 'dbemptyrestore' alias";
+	echo "alias dbemptyrestore='dt=\$(pwd); cd $(pwd); node --no-warnings DBUtils.js -dbEmptyRestore \$dt; cd \$dt;'" >> ~/.zshrc
+fi
+
+source ~/.zshrc
+
+echo "Setup complete"
