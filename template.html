@@ -1,0 +1,146 @@
+<html>
+    <head>
+        <title>DBMapper Visualisation</title>
+        <style>
+            body {
+                font-family: Arial;
+                font-size: 14px;
+            }
+            a {
+                text-decoration: none; color: black;
+            }
+        </style>
+    </head>
+    <body>
+        <div style="padding: 20px; font-size: 18px;"><<title>></div>
+        <div style="padding: 20px; padding-top: 0px;">Search&nbsp;<input type="text" id="searchbox" name="searchbox"></div>
+        <div style="padding: 20px; padding-top: 0px; display: none;" id="resultsDiv"></div>
+        <div id="dbHousingDiv" style="display: inline-block; vertical-align: top; border: solid 1px black;">
+        <div style="vertical-align: top; padding: 20px; border-bottom: solid 1px black;">Databases</div>
+        <div id="dbDiv" style="display: inline-block; vertical-align: top; padding: 20px;"></div></div>
+        <div id="tableHousingDiv" style="display: inline-block; vertical-align: top; border: solid 1px black; display: none;">
+        <div style="vertical-align: top; padding: 20px; border-bottom: solid 1px black;">Tables</div>
+        <div id="tableDiv" style="display: inline-block; vertical-align: top; padding: 20px;"></div></div>
+        <div id="fieldHousingDiv" style="display: inline-block; vertical-align: top; border: solid 1px black; display: none;">
+        <div style="vertical-align: top; padding: 20px; border-bottom: solid 1px black;">Fields</div>
+        <div id="fieldDiv" style="display: inline-block; vertical-align: top; padding: 20px;"></div></div>
+    </body>
+</html>
+<script type="text/javascript">
+    var dbMap = <<dbMap>>;
+
+    var selectedDb, selectedTable;
+    var spacer = "&nbsp;&nbsp;&nbsp;&nbsp;";
+    var resultsDiv = document.getElementById('resultsDiv');
+
+    function setDbDiv(){
+      var dbList = Object.keys(dbMap);
+      var dbDivContent = "";
+      for (let index = 0; index < dbList.length; index++){
+        var dbName = dbList[index];
+        var displayDbName = dbName == selectedDb ? '<span style="color: #44a63e;"><b>' + dbName + '</b></span>' : dbName;
+        dbDivContent += '<a href="" onclick="return openDB(\'' + dbName + '\')">' + displayDbName + '</a><br />';
+      }
+      document.getElementById("dbDiv").innerHTML = dbDivContent;
+      return false;
+    }
+
+    function openDB(dbName){
+      selectedDb = dbName;
+      selectedTable = null;
+      renderTables(dbName)
+      setDbDiv()
+      document.getElementById("tableHousingDiv").style.display = "inline-block";
+      document.getElementById("fieldDiv").innerHTML = "";
+      document.getElementById("fieldHousingDiv").style.display = "none";
+      return false;
+    }
+
+    function renderTables(dbName){
+      var dbObject = dbMap[dbName];
+      var tableNames = Object.keys(dbObject);
+      var tableDivContent = "";  for (let index = 0; index < tableNames.length; index++){
+        var tableName = tableNames[index];
+        var displayTableName = tableName == selectedTable ? '<span style="color: #44a63e;"><b>' + tableName + '</b></span>' : tableName;
+        tableDivContent += '<a href="" onclick="return openTable(\'' + dbName + '\',\'' + tableName + '\')">' + displayTableName + '</a><br />';
+      }
+      document.getElementById("tableDiv").innerHTML = tableDivContent;
+    }
+
+    function openTable(dbName, tableName){
+      selectedTable = tableName;
+      var tableObject = dbMap[dbName][tableName];
+      var fieldNames = Object.keys(tableObject);
+      var fieldDivContent = "";  for (let index = 0; index < fieldNames.length; index++){
+        var fieldName = fieldNames[index];
+        var fieldNameObject = dbMap[dbName][tableName][fieldName];
+        fieldDivContent += fieldName + spacer + fieldNameObject.type + spacer + (fieldNameObject.nullable == "f" ? "NOT NULLABLE" : "NULLABLE") + "</br>";
+      }
+      document.getElementById("fieldDiv").innerHTML = fieldDivContent;
+      document.getElementById("fieldHousingDiv").style.display = "inline-block";
+      renderTables(dbName);
+      return false;
+    }
+
+    const searchBox = document.getElementById("searchbox");
+    searchBox.addEventListener("keyup", function(event) {
+        if (event.key === "Enter") {
+            doSearch(event.srcElement.value);
+            event.srcElement.value = '';
+        }
+    });
+
+    function doSearch(searchTerm){
+        var lowercaseSearchTerm = searchTerm.toLowerCase();
+        var resultsArray = [];
+        var databases = Object.keys(dbMap);
+        for (var dbIndex = 0; dbIndex < databases.length; dbIndex++){
+            var database = databases[dbIndex];
+            if (database.toLowerCase().includes(lowercaseSearchTerm)){
+                resultsArray.push([database]);
+            }
+            var tables = Object.keys(dbMap[database]);
+            for (var tableIndex = 0; tableIndex < tables.length; tableIndex++){
+                var table = tables[tableIndex];
+                if (table.toLowerCase().includes(lowercaseSearchTerm)){
+                    resultsArray.push([database, table]);
+                }
+                var fields = Object.keys(dbMap[database][table]);
+                for (var fieldIndex = 0; fieldIndex < fields.length; fieldIndex++){
+                    var field = fields[fieldIndex];
+                    if (field.toLowerCase().includes(lowercaseSearchTerm)){
+                        resultsArray.push([database, table, field]);
+                    }
+                }
+            }
+        }
+        displayResults(resultsArray);
+    }
+
+    function displayResults(resultsArray){
+        resultsDiv.style.display = 'block';
+        if (resultsArray.length == 0){
+            resultsDiv.innerHTML = "No results.";
+            return;
+        }
+        var resultsDivContent = "";
+        for (var index = 0; index < resultsArray.length; index++){
+            var result = resultsArray[index];
+            var resultContent = "";
+            for (var level = 0; level < result.length; level++){
+                if (resultContent){
+                    resultContent += ".";
+                }
+                resultContent += !resultContent ? "<b>" + result[level] + "</b>" : result[level];
+            }
+            resultsDivContent += resultContent + "<br />";
+        }
+        resultsDiv.innerHTML = resultsDivContent;
+    }
+
+    setDbDiv();
+
+    window.onload = function() {
+        document.getElementById('searchbox').focus();
+    };
+</script>

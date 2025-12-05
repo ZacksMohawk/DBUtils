@@ -1,6 +1,7 @@
 global.appType = "DBUtils";
-global.version = "1.0.0";
+global.version = "1.1.0";
 
+const cliProgress = require('cli-progress');
 const prompt = require('prompt-sync')();
 const fs = require('fs');
 const { execSync } = require("child_process");
@@ -17,7 +18,21 @@ if (!fs.existsSync(configPath)){
 }
 let configObject = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 let username, ip, dbType, dbConnectionName, dbUser, dbPassword, dbConnectString;
-let validDbTypes = ['MySQL'];
+let validDbTypes = ['MySQL', 'CockroachDB'];
+let resultStartIndex = -1;
+
+let exportFilePath;
+let multibar, progressBar1, progressBar2;
+
+let dbMap = {};
+
+if (!fs.existsSync('Maps')){
+	fs.mkdirSync('Maps');
+}
+if (!fs.existsSync('Pages')){
+	fs.mkdirSync('Pages');
+}
+
 const utilsMenu = [
 	{
 		"name" : "Backup Line"
@@ -33,6 +48,12 @@ const utilsMenu = [
 	},
 	{
 		"name" : "Empty DB Restore (Structure Only)"
+	},
+	{
+		"name" : "Map DB Structure",
+	},
+	{
+		"name" : "View DB Maps",
 	}
 ];
 
@@ -52,6 +73,13 @@ else if (process.argv.indexOf("-dbFullRestore") != -1){
 }
 else if (process.argv.indexOf("-dbEmptyRestore") != -1){
 	restoreDb(true);
+}
+else if (process.argv.indexOf("-dbMapper") != -1){
+	chooseConnection();
+	mapDb();
+}
+else if (process.argv.indexOf("-dbMaps") != -1){
+	chooseMap();
 }
 else {
 	showMenu();
@@ -104,6 +132,17 @@ function handleOptionChoice(optionChoiceIndex){
 		restoreDb(true);
 		return;
 	}
+	if (optionChoiceIndex == 6){
+		Logger.log('');
+		chooseConnection();
+		mapDb();
+		return;
+	}
+	if (optionChoiceIndex == 7){
+		Logger.log('');
+		chooseMap();
+		return;
+	}
 	Logger.log("Invalid choice.");
 }
 
@@ -140,7 +179,7 @@ function chooseConnection(inputDbConnectionName){
 	let chosenConnection = connectionsObject[dbConnectionName];
 
 	username = chosenConnection.username;
-	ip = chosenConnection.ip;
+	ip = chosenConnection.ip ? chosenConnection.ip : '';
 	dbType = chosenConnection.dbType;
 	dbUser = chosenConnection.dbUser;
 	dbPassword = chosenConnection.dbPassword;
@@ -345,7 +384,10 @@ function backupDb(){
 			process.exit(0);
 		}
 	}
-	// TODO Implement this for CockroachDB
+	else if (dbType == 'CockroachDB'){
+		// TODO Implement this for CockroachDB
+		Logger.log("Not yet implemented");
+	}
 }
 
 function restoreDb(emptyDb){
@@ -416,7 +458,10 @@ function restoreDb(emptyDb){
 			process.exit(0);
 		}
 	}
-	// TODO Implement this for CockroachDB
+	else if (dbType == 'CockroachDB'){
+		// TODO Implement this for CockroachDB
+		Logger.log("Not yet implemented");
+	}
 }
 
 function executeQuery(){
@@ -440,4 +485,188 @@ function validateDbType(){
 		Logger.log("\n☹️👎 Invalid dbType '" + dbType + "'. Must be one of: " + validDbTypes.toString() + "\n");
 		process.exit(0);
 	}
+}
+
+function setResultStartIndex(){
+	if (dbType == 'MySQL'){
+		resultStartIndex = 1;
+		return;
+	}
+	if (dbType == 'CockroachDB'){
+		resultStartIndex = 2;
+		return;
+	}
+}
+
+function mapDb(){
+	validateDbType();
+	setResultStartIndex();
+	if (resultStartIndex == -1){
+		Logger.log("Invalid resultStartIndex for dbType. Aborting");
+		process.exit(0);
+	}
+	exportFilePath = 'Maps/dbMap_' + dbConnectionName + (ip ? '_' + ip : '') + '.json';
+	if (fs.existsSync(exportFilePath)){
+		let confirmContinue = prompt('DB Map "' + exportFilePath.replaceAll("Maps/dbMap_", "").replaceAll(".json", "") + '" already exists. Do you wish to re-map/overwrite? (y/n): ');
+		if (!confirmContinue || confirmContinue.toLowerCase() != 'y'){
+			let confirmVisualise = prompt('Open DB visualisation? (y/n): ');
+			if (!confirmVisualise || confirmVisualise.toLowerCase() == 'y'){
+				visualiseFromFile(exportFilePath);
+			}
+			process.exit(0);
+		}
+	}
+	Logger.log("Mapping...");
+
+	multibar = new cliProgress.MultiBar({
+	    clearOnComplete: false,
+	    hideCursor: true,
+	    format: ' {bar} | {name} | {value}/{total}',
+	    stopOnComplete: true
+	}, cliProgress.Presets.shades_grey);
+
+	progressBar1 = multibar.create(100, 0);
+	progressBar1.update(0, {name: ""});
+	multibar.update();
+
+	fs.writeFileSync('query.sql', 'SHOW DATABASES;');
+	let databasesResult = executeQuery();
+	let splitDatabasesResult = databasesResult.split("\n");
+
+	// process these databases into a map
+	for (let index = 1; index < splitDatabasesResult.length; index++){
+		let dbName = splitDatabasesResult[index].split("	")[0];
+		if (!dbName){
+			continue;
+		}
+		if (progressBar2){
+			progressBar2.update(0, {name: ""});
+		}
+		progressBar1.update(((index - 1) / (splitDatabasesResult.length - 2)) * 100, {name: dbName});
+		multibar.update();
+		dbMap[dbName] = fetchTables(dbName);
+	}
+
+	progressBar1.update(100, {name: ""});
+	progressBar2.update(100, {name: ""});
+	multibar.stop();
+
+	Logger.log('\nExporting dbMap to: ' + exportFilePath + '\n');
+	fs.writeFileSync(exportFilePath, JSON.stringify(dbMap, null, 4));
+
+	let confirmVisualise = prompt('Open DB visualisation? (y/n): ');
+	if (!confirmVisualise || confirmVisualise.toLowerCase() == 'y'){
+		visualiseFromFile(exportFilePath);
+	}
+}
+
+function fetchTables(dbName){
+	fs.writeFileSync('query.sql', 'USE ' + dbName + '; SHOW TABLES;');
+	let tablesResult = executeQuery();
+	let splitTablesResult = tablesResult.split("\n");
+
+	let tablesMap = {};
+
+	if (!progressBar2){
+		progressBar2 = multibar.create(100, 0);
+	}
+
+	// process these tables into a map
+	let tableName;
+	for (let index = resultStartIndex; index < splitTablesResult.length; index++){
+		tableName = extractTableName(splitTablesResult[index]);
+		if (!tableName){
+			continue;
+		}
+		progressBar2.update(((index - 2) / (splitTablesResult.length - 3)) * 100, {name: tableName});
+		multibar.update();
+		tablesMap[tableName] = fetchFields(dbName, tableName);
+	}
+	progressBar2.update(100, {name: tableName});
+	multibar.update();
+
+	return tablesMap;
+}
+
+function extractTableName(tableLine){
+	if (dbType == "MySQL"){
+		return tableLine;	
+	}
+	if (dbType == "CockroachDB"){
+		return tableLine.split("\t")[1];
+	}
+}
+
+function fetchFields(dbName, tableName){
+	fs.writeFileSync('query.sql', 'USE ' + dbName + '; SHOW COLUMNS FROM ' + tableName + ';');
+	let fieldsResult = executeQuery();
+	let splitFieldsResult = fieldsResult.split("\n");
+
+	let fieldsMap = {};
+
+	// process these fields into an array
+	for (let index = resultStartIndex; index < splitFieldsResult.length; index++){
+		let fieldsArray = splitFieldsResult[index].split("\t");
+		let fieldName = fieldsArray[0];
+		if (!fieldName){
+			continue;
+		}
+		fieldsMap[fieldName] = {
+			"type" : fieldsArray[1],
+			"nullable" : fieldsArray[2],
+			"default" : fieldsArray[3],
+			"generation_expression" : fieldsArray[4],
+			"indices" : fieldsArray[5],
+			"hidden" : fieldsArray[6]
+		};
+	}
+
+	return fieldsMap;
+}
+
+function visualiseFromFile(dbFilePath){
+	let dbMap = JSON.parse(fs.readFileSync(dbFilePath, 'utf8'));
+	visualise(dbFilePath, dbMap);
+}
+
+function visualise(dbFilePath, dbMap){
+	let dbMapTitle = dbFilePath.replaceAll('Maps/dbMap_', '');
+	dbMapTitle = dbMapTitle.substring(0, dbMapTitle.indexOf('_'));
+	let pageContent = fs.readFileSync('template.html', 'utf8')
+		.replaceAll("<<dbMap>>", JSON.stringify(dbMap))
+		.replaceAll("<<title>>", dbMapTitle);
+
+	let htmlPagePath = dbFilePath.replace("json", "html").replaceAll('Maps/', 'Pages/');
+	fs.writeFileSync(htmlPagePath, pageContent);
+	execSync('open -a "Google Chrome" ' + htmlPagePath);
+}
+
+function chooseMap(){
+	let mapFiles = fs.readdirSync('Maps');
+	if (mapFiles.length == 0){
+		Logger.log('No pre-existing map files found. Aborting');	
+		process.exit(0);
+	}
+	Logger.log('Please choose which DB Map to visualise\n');
+	for (let index = 0; index < mapFiles.length; index++){
+		let mapFile = mapFiles[index].replaceAll('.json', '').replaceAll('dbMap_', '');
+		Logger.log('\t' + (index + 1) + '. ' + mapFile);
+	}
+	Logger.log();
+	let dbMapChoice = prompt(mapFiles.length == 1 ? 'Choose: ' : 'Choose (1-' + mapFiles.length + '): ');
+	if (!dbMapChoice){
+		process.exit(0);
+	}
+	dbMapChoice = dbMapChoice.trim();
+	if (isNaN(dbMapChoice)){
+		Logger.log("Not a number. Aborting");
+		process.exit(0);
+	}
+	dbMapChoice = parseInt(dbMapChoice);
+	if (dbMapChoice < 1 || dbMapChoice > mapFiles.length){
+		Logger.log("Invalid choice. Aborting");
+		process.exit(0);
+	}
+
+	visualiseFromFile('Maps/' + mapFiles[dbMapChoice - 1]);
 }

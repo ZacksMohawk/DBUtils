@@ -8,6 +8,8 @@ DBLINERESTORESET=false
 DBFULLBACKUPSET=false
 DBFULLRESTORESET=false
 DBEMPTYRESTORESET=false
+DBMAPPERSET=false
+DBMAPSSET=false
 
 while read -r line
 do
@@ -28,6 +30,12 @@ do
 	fi
 	if [[ "$line" =~ ^"alias dbemptyrestore="* ]]; then
 		DBEMPTYRESTORESET=true
+	fi
+	if [[ "$line" =~ ^"alias dbmapper="* ]]; then
+		DBMAPPERSET=true
+	fi
+	if [[ "$line" =~ ^"alias dbmaps="* ]]; then
+		DBMAPSSET=true
 	fi
 done < ~/.zshrc
 
@@ -85,6 +93,24 @@ if [[ "$DBEMPTYRESTORESET" != true ]]; then
 	fi
 	echo "Setting 'dbemptyrestore' alias";
 	echo "alias dbemptyrestore='dt=\$(pwd); cd $(pwd); node --no-warnings DBUtils.js -dbEmptyRestore \$dt; cd \$dt;'" >> ~/.zshrc
+fi
+
+if [[ "$DBMAPPERSET" != true ]]; then
+	if [[ "$NEWLINESET" != true ]]; then
+		echo '' >> ~/.zshrc
+		NEWLINESET=true
+	fi
+	echo "Setting 'dbmapper' alias";
+	echo "alias dbmapper='dt=\$(pwd); cd $(pwd); node --no-warnings DBUtils.js -folderPath \$dt -dbMapper; cd \$dt;'" >> ~/.zshrc
+fi
+
+if [[ "$DBMAPSSET" != true ]]; then
+	if [[ "$NEWLINESET" != true ]]; then
+		echo '' >> ~/.zshrc
+		NEWLINESET=true
+	fi
+	echo "Setting 'dbmaps' alias";
+	echo "alias dbmaps='dt=\$(pwd); cd $(pwd); node --no-warnings DBUtils.js -folderPath \$dt -dbMaps; cd \$dt;'" >> ~/.zshrc
 fi
 
 source ~/.zshrc
