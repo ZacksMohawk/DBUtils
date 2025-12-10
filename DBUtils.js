@@ -1,5 +1,5 @@
 global.appType = "DBUtils";
-global.version = "1.1.0";
+global.version = "1.2.0";
 
 const cliProgress = require('cli-progress');
 const prompt = require('prompt-sync')();
@@ -20,6 +20,7 @@ let configObject = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 let username, ip, dbType, dbConnectionName, dbUser, dbPassword, dbConnectString;
 let validDbTypes = ['MySQL', 'CockroachDB'];
 let resultStartIndex = -1;
+let lineResultsExpectedLength = -1;
 
 let exportFilePath;
 let multibar, progressBar1, progressBar2;
@@ -191,6 +192,7 @@ function chooseConnection(inputDbConnectionName){
 }
 
 function backupLine(){
+	setDbTypeSpecificVariables();
 	Logger.log('');
 	let dbName = prompt("Please enter DB Name: ");
 	if (!dbName){
@@ -212,26 +214,25 @@ function backupLine(){
 		Logger.log("Aborting");
 		process.exit(0);
 	}
-	let backupQuery = 'USE ' + dbName + '; SELECT * FROM ' + tableName + ' WHERE ' + fieldName + ' = "' + value + '";'
+	let backupQuery = "USE " + dbName + "; SELECT * FROM " + tableName + " WHERE " + fieldName + " = '" + value + "';";
 	fs.writeFileSync('query.sql', backupQuery);
 	let backupResult = executeQuery().split("\n");
 
-
-	if (backupResult.length > 3){
+	if (backupResult.length > lineResultsExpectedLength){
 		Logger.log("More than 1 result for query: " + backupQuery);
 		Logger.log("Cannot handle multi-line backup. Aborting backup");
 		process.exit(0);
 	}
 
-	if (backupResult.length <= 1){
+	if (backupResult.length < lineResultsExpectedLength){
 		Logger.log("No results for query: " + backupQuery);
 		Logger.log("Aborting backup");
 		process.exit(0);
 	}
 
 	let processedResult = {};
-	let fieldNames = backupResult[0].split("\t");
-	let values = backupResult[1].split("\t");
+	let fieldNames = backupResult[fieldNamesIndex].split("\t");
+	let values = backupResult[valuesIndex].split("\t");
 	for (let index = 0; index < fieldNames.length; index++){
 		processedResult[fieldNames[index]] = values[index];
 	}
@@ -290,28 +291,28 @@ function restoreLine(){
 	let fieldNames = Object.keys(entryContent);
 	let fieldNamesString = '';
 	let valuesString = '';
-	let limitedValueSetString = '';
+	let limitedValueSetString = "";
 	for (let index = 0; index < fieldNames.length; index++){
 		let fieldName = fieldNames[index];
 
 		if (!fieldNamesString){
-			fieldNamesString += ', ';
+			fieldNamesString += ", ";
 		}
 		fieldNamesString += fieldName;
 
 		if (valuesString){
-			valuesString += ', ';
+			valuesString += ", ";
 		}
-		valuesString += '"' + entryContent[fieldName] + '"';
+		valuesString += "'" + entryContent[fieldName] + "'";
 
 		if (fieldName == restoreEntry.key){
 			continue;
 		}
 
 		if (limitedValueSetString){
-			limitedValueSetString += ', ';
+			limitedValueSetString += ", ";
 		}
-		limitedValueSetString += fieldName + ' = "' + entryContent[fieldName] + '"';
+		limitedValueSetString += fieldName + " = '" + entryContent[fieldName] + "'";
 	}
 
 	let confirmContinue = prompt('Restoring line(s) will completely replace any current line(s) with matching identifier. Continue? (y/n): ');
@@ -320,12 +321,26 @@ function restoreLine(){
 		process.exit(0);
 	}
 
-	let restoreQuery = 'USE ' + restoreEntry.database + '; INSERT INTO ' + restoreEntry.table + ' (' + fieldNames + ') VALUES (' + valuesString + ') ' +
-		'ON DUPLICATE KEY UPDATE ' + limitedValueSetString + ";";
+	let restoreQuery = generateLineRestoreQuery(restoreEntry, fieldNames, valuesString, limitedValueSetString);
 	fs.writeFileSync('query.sql', restoreQuery);
 	let restoreResult = executeQuery();
 
 	Logger.log("\n🙂👍 '" + chosenBackupFile + "' restored successfully\n");
+}
+
+function generateLineRestoreQuery(restoreEntry, fieldNames, valuesString, limitedValueSetString){
+	if (dbType == 'MySQL'){
+		return "USE " + restoreEntry.database + "; INSERT INTO " + restoreEntry.table + " (" + fieldNames + ") VALUES (" + valuesString + ") " +
+		"ON DUPLICATE KEY UPDATE " + limitedValueSetString + ";";
+	}
+	else if (dbType == 'CockroachDB'){
+		return "USE " + restoreEntry.database + "; INSERT INTO " + restoreEntry.table + " (" + fieldNames + ") VALUES (" + valuesString + ") " +
+		"ON CONFLICT (" + restoreEntry.key + ") DO UPDATE SET " + limitedValueSetString + ";";
+	}
+	else {
+		Logger.log("\n☹️👎 Invalid dbType '" + dbType + "'. Must be one of: " + validDbTypes.toString() + "\n");
+		process.exit(0);
+	}
 }
 
 function backupDb(){
@@ -487,20 +502,26 @@ function validateDbType(){
 	}
 }
 
-function setResultStartIndex(){
+function setDbTypeSpecificVariables(){
 	if (dbType == 'MySQL'){
 		resultStartIndex = 1;
+		lineResultsExpectedLength = 3;
+		fieldNamesIndex = 0;
+		valuesIndex = 1;
 		return;
 	}
 	if (dbType == 'CockroachDB'){
 		resultStartIndex = 2;
+		lineResultsExpectedLength = 4;
+		fieldNamesIndex = 1;
+		valuesIndex = 2;
 		return;
 	}
 }
 
 function mapDb(){
 	validateDbType();
-	setResultStartIndex();
+	setDbTypeSpecificVariables();
 	if (resultStartIndex == -1){
 		Logger.log("Invalid resultStartIndex for dbType. Aborting");
 		process.exit(0);

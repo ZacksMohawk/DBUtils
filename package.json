@@ -1,6 +1,6 @@
 {
   "name": "dbutils",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Command line tools for DB manipulation",
   "main": "DBUtils.js",
   "scripts": {
@@ -9,7 +9,8 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "cli-progress": "^3.12.0"
+    "cli-progress": "^3.12.0",
+    "prompt-sync": "^4.2.0"
   },
   "dependencies": {
     "ansi-regex": "^5.0.1",
@@ -17,5 +18,13 @@
     "is-fullwidth-code-point": "^3.0.0",
     "string-width": "^4.2.3",
     "strip-ansi": "^6.0.1"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ZacksMohawk/DBUtils.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ZacksMohawk/DBUtils/issues"
+  },
+  "homepage": "https://github.com/ZacksMohawk/DBUtils#readme"
 }
