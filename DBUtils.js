@@ -1,8 +1,10 @@
 global.appType = "DBUtils";
-global.version = "1.2.0";
+global.version = "1.3.0";
 
 const cliProgress = require('cli-progress');
-const prompt = require('prompt-sync')();
+const prompt = require('prompt-sync')({
+	autocomplete: complete()
+});
 const fs = require('fs');
 const { execSync } = require("child_process");
 const Logger = require('./includes/Logger');
@@ -33,6 +35,8 @@ if (!fs.existsSync('Maps')){
 if (!fs.existsSync('Pages')){
 	fs.mkdirSync('Pages');
 }
+
+let autocompleteArray = [];
 
 const utilsMenu = [
 	{
@@ -193,22 +197,46 @@ function chooseConnection(inputDbConnectionName){
 
 function backupLine(){
 	setDbTypeSpecificVariables();
+
+	let expectedMapPath = 'Maps/' + dbConnectionName + (ip ? '_' + ip : '') + '.json';
+	let existingMap;
+	if (fs.existsSync(expectedMapPath)){
+		existingMap = JSON.parse(fs.readFileSync(expectedMapPath, 'utf8'));
+		autocompleteArray = Object.keys(existingMap);
+	}
+
 	Logger.log('');
 	let dbName = prompt("Please enter DB Name: ");
 	if (!dbName){
 		Logger.log("Aborting");
 		process.exit(0);
 	}
+
+	if (existingMap[dbName]){
+		autocompleteArray = Object.keys(existingMap[dbName]);
+	}
+	else {
+		autocompleteArray = [];
+	}
 	let tableName = prompt("Please enter Table Name: ");
 	if (!tableName){
 		Logger.log("Aborting");
 		process.exit(0);
+	}
+
+	if (existingMap[dbName] && existingMap[dbName][tableName]){
+		autocompleteArray = Object.keys(existingMap[dbName][tableName]);
+	}
+	else {
+		autocompleteArray = [];
 	}
 	let fieldName = prompt("Please enter Primary Key Field Name: ");
 	if (!fieldName){
 		Logger.log("Aborting");
 		process.exit(0);
 	}
+
+	autocompleteArray = [];
 	let value = prompt("Please enter value: ");
 	if (!value){
 		Logger.log("Aborting");
@@ -526,9 +554,9 @@ function mapDb(){
 		Logger.log("Invalid resultStartIndex for dbType. Aborting");
 		process.exit(0);
 	}
-	exportFilePath = 'Maps/dbMap_' + dbConnectionName + (ip ? '_' + ip : '') + '.json';
+	exportFilePath = 'Maps/' + dbConnectionName + (ip ? '_' + ip : '') + '.json';
 	if (fs.existsSync(exportFilePath)){
-		let confirmContinue = prompt('DB Map "' + exportFilePath.replaceAll("Maps/dbMap_", "").replaceAll(".json", "") + '" already exists. Do you wish to re-map/overwrite? (y/n): ');
+		let confirmContinue = prompt('DB Map "' + exportFilePath.replaceAll("Maps/", "").replaceAll(".json", "") + '" already exists. Do you wish to re-map/overwrite? (y/n): ');
 		if (!confirmContinue || confirmContinue.toLowerCase() != 'y'){
 			let confirmVisualise = prompt('Open DB visualisation? (y/n): ');
 			if (!confirmVisualise || confirmVisualise.toLowerCase() == 'y'){
@@ -651,7 +679,7 @@ function visualiseFromFile(dbFilePath){
 }
 
 function visualise(dbFilePath, dbMap){
-	let dbMapTitle = dbFilePath.replaceAll('Maps/dbMap_', '');
+	let dbMapTitle = dbFilePath.replaceAll('Maps/', '');
 	dbMapTitle = dbMapTitle.substring(0, dbMapTitle.indexOf('_'));
 	let pageContent = fs.readFileSync('template.html', 'utf8')
 		.replaceAll("<<dbMap>>", JSON.stringify(dbMap))
@@ -670,7 +698,7 @@ function chooseMap(){
 	}
 	Logger.log('Please choose which DB Map to visualise\n');
 	for (let index = 0; index < mapFiles.length; index++){
-		let mapFile = mapFiles[index].replaceAll('.json', '').replaceAll('dbMap_', '');
+		let mapFile = mapFiles[index].replaceAll('.json', '');
 		Logger.log('\t' + (index + 1) + '. ' + mapFile);
 	}
 	Logger.log();
@@ -691,3 +719,15 @@ function chooseMap(){
 
 	visualiseFromFile('Maps/' + mapFiles[dbMapChoice - 1]);
 }
+
+function complete() {
+	return function (string) {
+		var returnArray = [];
+		for (let index = 0; index < autocompleteArray.length; index++) {
+			if (autocompleteArray[index].indexOf(string) == 0){
+				returnArray.push(autocompleteArray[index]);
+			}
+		}
+		return returnArray;
+	};
+};
