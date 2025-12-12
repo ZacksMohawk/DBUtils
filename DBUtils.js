@@ -1,5 +1,5 @@
 global.appType = "DBUtils";
-global.version = "1.3.0";
+global.version = "1.3.1";
 
 const cliProgress = require('cli-progress');
 const prompt = require('prompt-sync')({
@@ -198,22 +198,24 @@ function chooseConnection(inputDbConnectionName){
 function backupLine(){
 	setDbTypeSpecificVariables();
 
+	Logger.log('');
+
 	let expectedMapPath = 'Maps/' + dbConnectionName + (ip ? '_' + ip : '') + '.json';
 	let existingMap;
 	if (fs.existsSync(expectedMapPath)){
 		existingMap = JSON.parse(fs.readFileSync(expectedMapPath, 'utf8'));
 		autocompleteArray = Object.keys(existingMap);
+		Logger.log('[DB Map exists. Press Tab to autocomplete database names]\n');
 	}
-
-	Logger.log('');
 	let dbName = prompt("Please enter DB Name: ");
 	if (!dbName){
 		Logger.log("Aborting");
 		process.exit(0);
 	}
 
-	if (existingMap[dbName]){
+	if (existingMap && existingMap[dbName]){
 		autocompleteArray = Object.keys(existingMap[dbName]);
+		Logger.log('\n[Press Tab to autocomplete table names]\n');
 	}
 	else {
 		autocompleteArray = [];
@@ -224,8 +226,9 @@ function backupLine(){
 		process.exit(0);
 	}
 
-	if (existingMap[dbName] && existingMap[dbName][tableName]){
+	if (existingMap && existingMap[dbName] && existingMap[dbName][tableName]){
 		autocompleteArray = Object.keys(existingMap[dbName][tableName]);
+		Logger.log('\n[Press Tab to autocomplete field names]\n');
 	}
 	else {
 		autocompleteArray = [];
@@ -237,7 +240,7 @@ function backupLine(){
 	}
 
 	autocompleteArray = [];
-	let value = prompt("Please enter value: ");
+	let value = prompt((existingMap ? "\n" : "") + "Please enter value: ");
 	if (!value){
 		Logger.log("Aborting");
 		process.exit(0);
