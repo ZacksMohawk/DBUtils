@@ -240,7 +240,10 @@ function backupLine(){
 	}
 
 	autocompleteArray = [];
-	let value = prompt((existingMap ? "\n" : "") + "Please enter value: ");
+	if (existingMap){
+		Logger.log('');
+	}
+	let value = prompt("Please enter value: ");
 	if (!value){
 		Logger.log("Aborting");
 		process.exit(0);
