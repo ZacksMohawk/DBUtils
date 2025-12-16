@@ -36,7 +36,7 @@
     function setDbDiv(){
       var dbList = Object.keys(dbMap);
       var dbDivContent = "";
-      for (let index = 0; index < dbList.length; index++){
+      for (var index = 0; index < dbList.length; index++){
         var dbName = dbList[index];
         var displayDbName = dbName == selectedDb ? '<span style="color: #44a63e;"><b>' + dbName + '</b></span>' : dbName;
         dbDivContent += '<a href="" onclick="return openDB(\'' + dbName + '\')">' + displayDbName + '</a><br />';
@@ -59,7 +59,8 @@
     function renderTables(dbName){
       var dbObject = dbMap[dbName];
       var tableNames = Object.keys(dbObject);
-      var tableDivContent = "";  for (let index = 0; index < tableNames.length; index++){
+      var tableDivContent = "";
+      for (var index = 0; index < tableNames.length; index++){
         var tableName = tableNames[index];
         var displayTableName = tableName == selectedTable ? '<span style="color: #44a63e;"><b>' + tableName + '</b></span>' : tableName;
         tableDivContent += '<a href="" onclick="return openTable(\'' + dbName + '\',\'' + tableName + '\')">' + displayTableName + '</a><br />';
@@ -70,12 +71,29 @@
     function openTable(dbName, tableName){
       selectedTable = tableName;
       var tableObject = dbMap[dbName][tableName];
+      if (!tableObject){
+        return;
+      }
       var fieldNames = Object.keys(tableObject);
-      var fieldDivContent = "";  for (let index = 0; index < fieldNames.length; index++){
+      var fieldDivContent = '<table style="font-family: Arial; font-size: 14px;">';
+      for (var index = 0; index < fieldNames.length; index++){
         var fieldName = fieldNames[index];
         var fieldNameObject = dbMap[dbName][tableName][fieldName];
-        fieldDivContent += fieldName + spacer + fieldNameObject.type + spacer + (fieldNameObject.nullable == "f" ? "NOT NULLABLE" : "NULLABLE") + "</br>";
+        var fieldTitles = Object.keys(fieldNameObject);
+        if (index == 0){
+          fieldDivContent += '<tr style="font-weight: bold;"><td>Name</td>';
+          for (var fieldTitleIndex = 0; fieldTitleIndex < fieldTitles.length; fieldTitleIndex++){
+            fieldDivContent += '<td>' + fieldTitles[fieldTitleIndex] + '</td>';
+          }
+          fieldDivContent += '</tr>';
+        }
+        fieldDivContent += '<tr><td>' + fieldName + '</td>';
+        for (var fieldTitleIndex = 0; fieldTitleIndex < fieldTitles.length; fieldTitleIndex++){
+          fieldDivContent += '<td>' + fieldNameObject[fieldTitles[fieldTitleIndex]] + '</td>';
+        }
+        fieldDivContent += '</tr>';
       }
+      fieldDivContent += '</table>';
       document.getElementById("fieldDiv").innerHTML = fieldDivContent;
       document.getElementById("fieldHousingDiv").style.display = "inline-block";
       renderTables(dbName);

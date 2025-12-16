@@ -1,5 +1,5 @@
 global.appType = "DBUtils";
-global.version = "1.3.1";
+global.version = "1.3.2";
 
 const cliProgress = require('cli-progress');
 const prompt = require('prompt-sync')({
@@ -658,22 +658,26 @@ function fetchFields(dbName, tableName){
 	let splitFieldsResult = fieldsResult.split("\n");
 
 	let fieldsMap = {};
+	let fieldNamesSet = false;
+	let fieldNamesArray;
 
-	// process these fields into an array
-	for (let index = resultStartIndex; index < splitFieldsResult.length; index++){
+	// process these fields into a map
+	for (let index = resultStartIndex - 1; index < splitFieldsResult.length; index++){
+		if (!fieldNamesSet){
+			fieldNamesArray = splitFieldsResult[index].split("\t");
+			fieldNamesSet = true;
+			continue;
+		}
 		let fieldsArray = splitFieldsResult[index].split("\t");
 		let fieldName = fieldsArray[0];
 		if (!fieldName){
 			continue;
 		}
-		fieldsMap[fieldName] = {
-			"type" : fieldsArray[1],
-			"nullable" : fieldsArray[2],
-			"default" : fieldsArray[3],
-			"generation_expression" : fieldsArray[4],
-			"indices" : fieldsArray[5],
-			"hidden" : fieldsArray[6]
-		};
+
+		fieldsMap[fieldName] = {};
+		for (let fieldNameIndex = 1; fieldNameIndex < fieldNamesArray.length; fieldNameIndex++){
+			fieldsMap[fieldName][fieldNamesArray[fieldNameIndex]] = fieldsArray[fieldNameIndex];
+		}
 	}
 
 	return fieldsMap;
