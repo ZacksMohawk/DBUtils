@@ -1,5 +1,5 @@
 global.appType = "DBUtils";
-global.version = "1.3.2";
+global.version = "1.4.0";
 
 const cliProgress = require('cli-progress');
 const prompt = require('prompt-sync')({
@@ -59,6 +59,9 @@ const utilsMenu = [
 	},
 	{
 		"name" : "View DB Maps",
+	},
+	{
+		"name" : "Create DB Structure From Map",
 	}
 ];
 
@@ -84,7 +87,10 @@ else if (process.argv.indexOf("-dbMapper") != -1){
 	mapDb();
 }
 else if (process.argv.indexOf("-dbMaps") != -1){
-	chooseMap();
+	chooseMapToVisualise();
+}
+else if (process.argv.indexOf("-dbCreateStructureFromMap") != -1){
+	createDbStructureFromMap();
 }
 else {
 	showMenu();
@@ -145,13 +151,18 @@ function handleOptionChoice(optionChoiceIndex){
 	}
 	if (optionChoiceIndex == 7){
 		Logger.log('');
-		chooseMap();
+		chooseMapToVisualise();
+		return;
+	}
+	if (optionChoiceIndex == 8){
+		Logger.log('');
+		createDbStructureFromMap();
 		return;
 	}
 	Logger.log("Invalid choice.");
 }
 
-function chooseConnection(inputDbConnectionName){
+function chooseConnection(connectionMessage, inputDbConnectionName){
 	let connectionsObject = configObject.dbConnections;
 	if (!inputDbConnectionName){
 		if (!connectionsObject){
@@ -161,7 +172,7 @@ function chooseConnection(inputDbConnectionName){
 
 		let connectionKeys = Object.keys(connectionsObject);
 
-		Logger.log("Please choose a connection\n");
+		Logger.log((connectionMessage ? connectionMessage : "Please choose a connection") + "\n");
 		for (let index = 0; index < connectionKeys.length; index++){
 			Logger.log("\t" + (index + 1) + ". " + connectionKeys[index]);
 		}
@@ -319,7 +330,7 @@ function restoreLine(){
 
 	let restoreEntry = JSON.parse(fs.readFileSync("LineBackups/" + chosenBackupFile, 'utf8'));
 
-	chooseConnection(restoreEntry.dbConnectionName);
+	chooseConnection(null, restoreEntry.dbConnectionName);
 
 	let entryContent = restoreEntry.result;
 	let fieldNames = Object.keys(entryContent);
@@ -474,7 +485,7 @@ function restoreDb(emptyDb){
 	let chosenBackupFile = validFileNames[backupFileChoiceIndex - 1];
 
 	let restoreDbConnection = chosenBackupFile.substring(0, chosenBackupFile.indexOf("."));
-	chooseConnection(restoreDbConnection);
+	chooseConnection(null, restoreDbConnection);
 
 	validateDbType();
 
@@ -560,17 +571,48 @@ function mapDb(){
 		Logger.log("Invalid resultStartIndex for dbType. Aborting");
 		process.exit(0);
 	}
+
+	fs.writeFileSync('query.sql', 'SHOW DATABASES;');
+	let databasesResult = executeQuery();
+	let splitDatabasesResult = databasesResult.split("\n");
+
+
+	splitDatabasesResult.splice(0,1);
+	splitDatabasesResult.splice(splitDatabasesResult.length - 1,1);
+	// refine the splitDatabasesResult
+	let refinedDbList = [];
+	for (let index = 0; index < splitDatabasesResult.length; index++){
+		refinedDbList.push(splitDatabasesResult[index].split("	")[0]);
+	}
+	autocompleteArray = refinedDbList;
+	Logger.log('');
+	let specificDbName = prompt("Please enter DB Name (tab to cycle through choices, leave blank to map all DBs on the chosen connection): ");
+	if (specificDbName){
+		refinedDbList = [specificDbName];
+	}
+
+	let confirmOverwrite;
 	exportFilePath = 'Maps/' + dbConnectionName + (ip ? '_' + ip : '') + '.json';
 	if (fs.existsSync(exportFilePath)){
-		let confirmContinue = prompt('DB Map "' + exportFilePath.replaceAll("Maps/", "").replaceAll(".json", "") + '" already exists. Do you wish to re-map/overwrite? (y/n): ');
-		if (!confirmContinue || confirmContinue.toLowerCase() != 'y'){
-			let confirmVisualise = prompt('Open DB visualisation? (y/n): ');
-			if (!confirmVisualise || confirmVisualise.toLowerCase() == 'y'){
-				visualiseFromFile(exportFilePath);
+		if (specificDbName){
+			Logger.log("NOTE: Selecting 'n', or anything other than 'y', will result in a single DB map for: " + specificDbName);
+			confirmOverwrite = prompt('DB Map "' + exportFilePath.replaceAll("Maps/", "").replaceAll(".json", "") + '" already exists. Do you wish to re-map/overwrite the specific section? (y/n): ');
+		}
+		else {
+			confirmOverwrite = prompt('DB Map "' + exportFilePath.replaceAll("Maps/", "").replaceAll(".json", "") + '" already exists. Do you wish to re-map/overwrite? (y/n): ');
+			if (!confirmOverwrite || confirmOverwrite.toLowerCase() != 'y'){
+				let confirmVisualise = prompt('Open DB visualisation? (y/n): ');
+				if (!confirmVisualise || confirmVisualise.toLowerCase() == 'y'){
+					visualiseFromFile(exportFilePath);
+				}
+				process.exit(0);
 			}
-			process.exit(0);
 		}
 	}
+	else if (specificDbName){
+		exportFilePath = exportFilePath.replaceAll(".json", "." + specificDbName + ".json");
+	}
+
 	Logger.log("Mapping...");
 
 	multibar = new cliProgress.MultiBar({
@@ -584,20 +626,13 @@ function mapDb(){
 	progressBar1.update(0, {name: ""});
 	multibar.update();
 
-	fs.writeFileSync('query.sql', 'SHOW DATABASES;');
-	let databasesResult = executeQuery();
-	let splitDatabasesResult = databasesResult.split("\n");
-
 	// process these databases into a map
-	for (let index = 1; index < splitDatabasesResult.length; index++){
-		let dbName = splitDatabasesResult[index].split("	")[0];
-		if (!dbName){
-			continue;
-		}
+	for (let index = 0; index < refinedDbList.length; index++){
+		let dbName = refinedDbList[index];
 		if (progressBar2){
 			progressBar2.update(0, {name: ""});
 		}
-		progressBar1.update(((index - 1) / (splitDatabasesResult.length - 2)) * 100, {name: dbName});
+		progressBar1.update(((index - 1) / (refinedDbList.length - 2)) * 100, {name: dbName});
 		multibar.update();
 		dbMap[dbName] = fetchTables(dbName);
 	}
@@ -606,8 +641,27 @@ function mapDb(){
 	progressBar2.update(100, {name: ""});
 	multibar.stop();
 
+	if (specificDbName){
+		if (!confirmOverwrite || confirmOverwrite.toLowerCase() != 'y'){
+			exportFilePath = exportFilePath.replaceAll(".json", "." + specificDbName + ".json");
+		}
+		else {
+			let loadedDbData = JSON.parse(fs.readFileSync(exportFilePath, 'utf8'));
+			let loadedDbMap = loadedDbData.databases;
+			loadedDbMap[specificDbName] = dbMap[specificDbName];
+			dbMap = loadedDbMap;
+		}
+	}
+
+	let exportedDbData = {
+		"metadata" : {
+			"dbType" : dbType
+		},
+		"databases" : dbMap
+	};
+
 	Logger.log('\nExporting dbMap to: ' + exportFilePath + '\n');
-	fs.writeFileSync(exportFilePath, JSON.stringify(dbMap, null, 4));
+	fs.writeFileSync(exportFilePath, JSON.stringify(exportedDbData, null, 4));
 
 	let confirmVisualise = prompt('Open DB visualisation? (y/n): ');
 	if (!confirmVisualise || confirmVisualise.toLowerCase() == 'y'){
@@ -657,6 +711,23 @@ function fetchFields(dbName, tableName){
 	let fieldsResult = executeQuery();
 	let splitFieldsResult = fieldsResult.split("\n");
 
+	let columnKeyObject = {};
+
+	// specific indentification of primary keys in CockroachDB
+	if (dbType == 'CockroachDB'){
+		fs.writeFileSync('query.sql', 'USE ' + dbName + '; SHOW INDEX FROM ' + tableName + ';');
+		let keysResult = executeQuery();
+		let splitKeysResult = keysResult.split("\n");
+		for (let keyIndex = resultStartIndex; keyIndex < splitKeysResult.length; keyIndex++){
+			let keyLine = splitKeysResult[keyIndex];
+			let splitKeyLine = keyLine.split("\t");
+			let indexedFieldName = splitKeyLine[4];
+			if (splitKeyLine[6] == 'f'){
+				columnKeyObject[indexedFieldName] = "PRI";
+			}
+		}
+	}
+
 	let fieldsMap = {};
 	let fieldNamesSet = false;
 	let fieldNamesArray;
@@ -678,14 +749,19 @@ function fetchFields(dbName, tableName){
 		for (let fieldNameIndex = 1; fieldNameIndex < fieldNamesArray.length; fieldNameIndex++){
 			fieldsMap[fieldName][fieldNamesArray[fieldNameIndex]] = fieldsArray[fieldNameIndex];
 		}
+		if (dbType == 'CockroachDB'){
+			if (columnKeyObject[fieldName]){
+				fieldsMap[fieldName]['Key'] = columnKeyObject[fieldName];
+			}
+		}
 	}
 
 	return fieldsMap;
 }
 
 function visualiseFromFile(dbFilePath){
-	let dbMap = JSON.parse(fs.readFileSync(dbFilePath, 'utf8'));
-	visualise(dbFilePath, dbMap);
+	let loadedDbData = JSON.parse(fs.readFileSync(dbFilePath, 'utf8'));
+	visualise(dbFilePath, loadedDbData);
 }
 
 function visualise(dbFilePath, dbMap){
@@ -700,13 +776,17 @@ function visualise(dbFilePath, dbMap){
 	execSync('open -a "Google Chrome" ' + htmlPagePath);
 }
 
-function chooseMap(){
+function chooseMapToVisualise(){
+	visualiseFromFile(chooseMap('Please choose which DB Map to visualise\n'));
+}
+
+function chooseMap(chooseMessage){
 	let mapFiles = fs.readdirSync('Maps');
 	if (mapFiles.length == 0){
 		Logger.log('No pre-existing map files found. Aborting');	
 		process.exit(0);
 	}
-	Logger.log('Please choose which DB Map to visualise\n');
+	Logger.log(chooseMessage);
 	for (let index = 0; index < mapFiles.length; index++){
 		let mapFile = mapFiles[index].replaceAll('.json', '');
 		Logger.log('\t' + (index + 1) + '. ' + mapFile);
@@ -726,8 +806,7 @@ function chooseMap(){
 		Logger.log("Invalid choice. Aborting");
 		process.exit(0);
 	}
-
-	visualiseFromFile('Maps/' + mapFiles[dbMapChoice - 1]);
+	return 'Maps/' + mapFiles[dbMapChoice - 1];
 }
 
 function complete() {
@@ -741,3 +820,148 @@ function complete() {
 		return returnArray;
 	};
 };
+
+function createDbStructureFromMap(){
+	let dbFilePath = chooseMap('Please select DB Map from which to create empty DB structure\n');
+	let loadedDbData = JSON.parse(fs.readFileSync(dbFilePath, 'utf8'));
+	let dbMap = loadedDbData.databases;
+	let loadedDbMetaData = loadedDbData.metadata;
+	if (!loadedDbMetaData){
+		Logger.log("Missing metadata, unable to identify dbType. Aborting");
+		process.exit(0);
+	}
+	let loadedDbType = loadedDbMetaData.dbType;
+
+	Logger.log('');
+	let dbName;
+	autocompleteArray = Object.keys(dbMap);
+	if (autocompleteArray.length == 1){
+		dbName = autocompleteArray[0];
+		Logger.log("Chosen DB: " + dbName);
+	}
+	else {
+		dbName = prompt("Please enter DB Name (tab to cycle through choices): ");
+		if (!dbName){
+			Logger.log("Aborting");
+			process.exit(0);
+		}
+	}
+	let chosenDbStructure = dbMap[dbName];
+	if (!chosenDbStructure){
+		Logger.log("Database '" + dbName + "' not found. Aborting");
+		process.exit(0);
+	}
+
+	Logger.log('');
+	chooseConnection("Please choose a connection on which to create this empty DB");
+
+	Logger.log('');
+	let confirmContinue = prompt('This will write over any existing DB with empty tables. Continue? (y/n): ');
+	if (!confirmContinue || confirmContinue.toLowerCase() != 'y'){
+		Logger.log("Aborting");
+		process.exit(0);
+	}
+
+	validateDbType();
+
+	let createDbStatement = "CREATE DATABASE IF NOT EXISTS " + dbName + ";\n"
+		+ "USE " + dbName + ";";
+
+	let tableNameArray = Object.keys(chosenDbStructure);
+
+	for (let tableIndex = 0; tableIndex < tableNameArray.length; tableIndex++){
+		let tableName = tableNameArray[tableIndex];
+		let tableStructure = chosenDbStructure[tableName];
+
+		let createTableStatement = "DROP TABLE IF EXISTS " + tableName + ";"
+			+ "\nCREATE TABLE " + tableName + " (\n";
+		let primaryKeyArray = [];
+
+		let fieldNameArray = Object.keys(tableStructure);
+		for (let fieldIndex = 0; fieldIndex < fieldNameArray.length; fieldIndex++){
+			let fieldName = fieldNameArray[fieldIndex];
+			let fieldStructure = tableStructure[fieldName];
+
+			if (fieldStructure.Key == "PRI"){
+				primaryKeyArray.push(fieldName);
+			}
+
+			if (fieldIndex > 0){
+				createTableStatement += ",\n";
+			}
+
+			createTableStatement += generateTableFieldLine(fieldName, fieldStructure, loadedDbType, dbType, primaryKeyArray);
+		}
+		if (['MySQL'].includes(dbType) && primaryKeyArray.length > 0){
+			createTableStatement += ",\nPRIMARY KEY (" + primaryKeyArray.toString() + ")";
+		}
+		createTableStatement += "\n);";
+
+		createDbStatement += "\n\n" + createTableStatement;
+	}
+
+	fs.writeFileSync('query.sql', createDbStatement);
+	let restoreResult = executeQuery();
+
+	if (restoreResult){
+		Logger.log(restoreResult);
+	}
+	else {
+		Logger.log("\n🙂👍 '" + dbName + "' structure created successfully on " + dbConnectionName + "\n");
+	}
+}
+
+function generateTableFieldLine(fieldName, fieldStructure, loadedDbType, dbType, primaryKeyArray){
+	if (loadedDbType == 'MySQL'){
+		if (dbType == 'MySQL'){
+			return fieldName + " " + fieldStructure.Type
+				+ (fieldStructure.Null && fieldStructure.Null == "NO" ? " NOT NULL" : "")
+				+ (fieldStructure.Default && fieldStructure.Default != "NULL" ? " DEFAULT " + fieldStructure.Default : "")
+				+ (fieldStructure.Extra && fieldStructure.Extra == "auto_increment" ? " AUTO_INCREMENT" : "");
+		}
+		if (dbType == 'CockroachDB'){
+			if (fieldStructure.Default == 'CURRENT_TIMESTAMP'){
+				fieldStructure.Default = 'now()';
+			}
+			return fieldName + " " + fieldStructure.Type
+				+ (primaryKeyArray.includes(fieldName) ? " PRIMARY KEY" : "")
+				+ (fieldStructure.Null && fieldStructure.Null == "NO" ? " NOT NULL" : "")
+				+ (fieldStructure.Default && fieldStructure.Default != "NULL" ? " DEFAULT " + fieldStructure.Default : "")
+				+ (fieldStructure.Extra && fieldStructure.Extra == "auto_increment" ? " DEFAULT unique_rowid()" : "");
+		}
+	}
+	if (loadedDbType == 'CockroachDB'){
+		if (dbType == 'MySQL'){
+			let defaultSection = '';
+			if (!fieldStructure.column_default){
+				// do nothing
+			}
+			else if (fieldStructure.column_default == 'now():::TIMESTAMP'){
+				defaultSection = ' DEFAULT CURRENT_TIMESTAMP';
+			}
+			else if (fieldStructure.column_default == "unique_rowid()"){
+				defaultSection = ' AUTO_INCREMENT';
+			}
+			return fieldName + " " + convertTypeCockroachDbToMySql(fieldStructure.data_type)
+				+ (fieldStructure.is_nullable && fieldStructure.is_nullable == "f" ? " NOT NULL" : "")
+				+ defaultSection;
+		}
+		if (dbType == 'CockroachDB'){
+			Logger.log("Not yet implemented 'CockroachDB -> CockroachDB' empty DB creation. Aborting");
+			process.exit(0);
+		}
+	}
+	Logger.log("Unable to generate table structure data from loadedDbType: " + loadedDbType);
+	process.exit(0);
+}
+
+function convertTypeCockroachDbToMySql(type){
+	if (type.startsWith("INT")){
+		let intSize = type.replaceAll("INT", "");
+		return "int(" + intSize + ")";
+	}
+	if (type == "STRING"){
+		return "TEXT";
+	}
+	return type;
+}

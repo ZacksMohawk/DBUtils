@@ -10,6 +10,7 @@ DBFULLRESTORESET=false
 DBEMPTYRESTORESET=false
 DBMAPPERSET=false
 DBMAPSSET=false
+DBCREATESTRUCTUREFROMMAPSET=false
 
 while read -r line
 do
@@ -36,6 +37,9 @@ do
 	fi
 	if [[ "$line" =~ ^"alias dbmaps="* ]]; then
 		DBMAPSSET=true
+	fi
+	if [[ "$line" =~ ^"alias dbcreatestructurefrommap="* ]]; then
+		DBCREATESTRUCTUREFROMMAPSET=true
 	fi
 done < ~/.zshrc
 
@@ -111,6 +115,15 @@ if [[ "$DBMAPSSET" != true ]]; then
 	fi
 	echo "Setting 'dbmaps' alias";
 	echo "alias dbmaps='dt=\$(pwd); cd $(pwd); node --no-warnings DBUtils.js -folderPath \$dt -dbMaps; cd \$dt;'" >> ~/.zshrc
+fi
+
+if [[ "$DBCREATESTRUCTUREFROMMAPSET" != true ]]; then
+	if [[ "$NEWLINESET" != true ]]; then
+		echo '' >> ~/.zshrc
+		NEWLINESET=true
+	fi
+	echo "Setting 'dbcreatestructurefrommap' alias";
+	echo "alias dbcreatestructurefrommap='dt=\$(pwd); cd $(pwd); node --no-warnings DBUtils.js -folderPath \$dt -dbCreateStructureFromMap; cd \$dt;'" >> ~/.zshrc
 fi
 
 source ~/.zshrc
